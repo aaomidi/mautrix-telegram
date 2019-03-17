@@ -10,3 +10,5 @@ tulir-telethon==1.25.0a5
 asyncpg>=0.20,<0.26
 mako>=1,<2
 setuptools
+uvloop
+psycopg2
