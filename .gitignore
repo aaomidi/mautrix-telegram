@@ -16,3 +16,5 @@ __pycache__
 *.db
 *.pickle
 *.bak
+
+.vscode/
