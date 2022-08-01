@@ -83,7 +83,8 @@ class Bot(AbstractUser):
     async def get_me(self, use_cache: bool = True) -> Tuple[User, UserID]:
         if not use_cache or not self._me_mxid:
             self._me_info = await self.client.get_me()
-            self._me_mxid = pu.Puppet.get_mxid_from_id(TelegramID(self._me_info.id))
+            self._me_mxid = pu.Puppet.get_mxid_from_id(
+                TelegramID(self._me_info.id))
         return self._me_info, self._me_mxid
 
     async def init_permissions(self) -> None:
@@ -113,7 +114,8 @@ class Bot(AbstractUser):
         self.tg_username = info.username
         self.mxid = pu.Puppet.get_mxid_from_id(self.tgid)
 
-        chat_ids = [chat_id for chat_id, chat_type in self.chats.items() if chat_type == "chat"]
+        chat_ids = [chat_id for chat_id,
+                    chat_type in self.chats.items() if chat_type == "chat"]
         response = await self.client(GetChatsRequest(chat_ids))
         for chat in response.chats:
             if isinstance(chat, ChatForbidden) or chat.left or chat.deactivated:
@@ -161,7 +163,8 @@ class Bot(AbstractUser):
             if isinstance(chat, PeerChannel):
                 p = await self.client(GetParticipantRequest(chat, tgid))
                 return isinstance(
-                    p.participant, (ChannelParticipantCreator, ChannelParticipantAdmin)
+                    p.participant, (ChannelParticipantCreator,
+                                    ChannelParticipantAdmin)
                 )
             elif isinstance(chat, PeerChat):
                 chat = await self.client(GetFullChatRequest(chat.chat_id))
@@ -233,6 +236,38 @@ class Bot(AbstractUser):
         else:
             return reply("Failed to find chat ID.")
 
+    async def handle_command_ban(self, message: Message, reply: ReplyFunc) -> Awaitable[Message]:
+        if not message.is_reply:
+            return
+
+        reply_message: Message = await message.get_reply_message()
+        if not reply_message:
+            return
+
+        _, bot_id = await self.get_me()
+        if reply_message.sender_id != bot_id:
+            return
+
+        chat = await message.get_chat()
+        if not chat:
+            return
+
+        sender = message.get_sender()
+        if not sender:
+            return
+
+        portal = await po.Portal.get_by_entity(chat)
+        if not portal:
+            return
+
+        target_user = portal.get_matrix_user_by_tg_msg_id(reply_message.id)
+        if not target_user:
+            return
+
+        portal.az.intent.ban_user(
+            portal.mxid, target_user.mxid, f"Banned from Telegram by {sender.displayname}")
+        return reply(f"Banned {target_user.username} from matrix.")
+
     def match_command(self, text: str, command: str) -> bool:
         text = text.lower()
         command = f"/{command.lower()}"
@@ -242,7 +277,8 @@ class Bot(AbstractUser):
         if is_plain_command:
             return True
 
-        is_arg_command = text.startswith(command + " ") or text.startswith(command_targeted + " ")
+        is_arg_command = text.startswith(
+            command + " ") or text.startswith(command_targeted + " ")
         if is_arg_command:
             return True
 
@@ -262,6 +298,11 @@ class Bot(AbstractUser):
         elif self.match_command(text, "id"):
             await self.handle_command_id(message, reply)
             return
+        elif self.match_command(text, "ban"):
+            if not await self.check_can_use_commands(message, reply):
+                return
+            await self.handle_command_ban(message, reply)
+            return
         elif message.is_private:
             return
 
@@ -276,7 +317,7 @@ class Bot(AbstractUser):
                 await self.handle_command_portal(portal, reply)
             elif is_invite_cmd:
                 try:
-                    mxid = text[text.index(" ") + 1 :]
+                    mxid = text[text.index(" ") + 1:]
                 except ValueError:
                     mxid = ""
                 await self.handle_command_invite(portal, reply, mxid_input=UserID(mxid))

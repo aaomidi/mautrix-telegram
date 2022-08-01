@@ -196,6 +196,8 @@ from mautrix.util.message_send_checkpoint import MessageSendCheckpointStatus
 from mautrix.util.simple_lock import SimpleLock
 from mautrix.util.simple_template import SimpleTemplate
 
+from mautrix_telegram.util.lu_dict import LUDict
+
 from . import abstract_user as au, formatter, portal_util as putil, puppet as p, user as u, util
 from .config import Config
 from .db import (
@@ -293,6 +295,7 @@ class Portal(DBPortal, BasePortal):
     _sponsored_evt_id: EventID | None
     _sponsored_seen: dict[UserID, bool]
     _new_messages_after_sponsored: bool
+    _tg_msg_id_to_mx_user: LUDict[TelegramID, u.User]
 
     def __init__(
         self,
@@ -354,6 +357,7 @@ class Portal(DBPortal, BasePortal):
         self._sponsored_msg_lock = asyncio.Lock()
         self._sponsored_seen = {}
         self._new_messages_after_sponsored = True
+        self._tg_msg_id_to_mx_user = LUDict(5000)
 
     # region Properties
 
@@ -1462,6 +1466,9 @@ class Portal(DBPortal, BasePortal):
             # We'll just assume the user is already in the chat.
             pass
 
+    def get_matrix_user_by_tg_msg_id(self, msgId: TelegramID) -> u.User | None:
+        return self.by_tgid.get(msgId)
+
     @staticmethod
     def hash_user_id(val: UserID) -> int:
         """
@@ -1750,6 +1757,7 @@ class Portal(DBPortal, BasePortal):
         msgtype: MessageType | None = None,
     ) -> None:
         self.log.trace("Handled Matrix message: %s", response)
+        self._tg_msg_id_to_mx_user[self.response.id, sender.mxid]
         event_hash, _ = self.dedup.check(response, (event_id, space), force_hash=edit_index != 0)
         if edit_index < 0:
             prev_edit = await DBMessage.get_one_by_tgid(TelegramID(response.id), space, -1)
